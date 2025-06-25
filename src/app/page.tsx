@@ -12,7 +12,7 @@ import { DataTable } from "@/components/data-table";
 import { columns } from "@/components/columns";
 import { Trash2, FileDown, FileText } from "lucide-react";
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 interface AutoTable extends jsPDF {
   autoTable: (options: {
@@ -164,7 +164,7 @@ export default function Home() {
   };
 
   const generatePDF = () => {
-    const doc = new jsPDF() as AutoTable;
+    const doc = new jsPDF();
     
     // Başlık
     doc.setFontSize(20);
@@ -176,42 +176,44 @@ export default function Home() {
     doc.setFontSize(16);
     doc.text('Genel İstatistikler', 20, 45);
     doc.setFontSize(12);
-    const statsData = [
-      ['Toplam Ürün', products.length.toString()],
-      ['Sayılan Ürün', products.filter(p => p.countedQuantity > 0).length.toString()],
-      ['Doğru Sayım', products.filter(p => Number(p.countedQuantity) === Number(p.Envant)).length.toString()],
-      ['Eksik Sayım', products.filter(p => Number(p.countedQuantity) < Number(p.Envant) && p.countedQuantity > 0).length.toString()],
-      ['Fazla Sayım', products.filter(p => Number(p.countedQuantity) > Number(p.Envant)).length.toString()],
-      ['Sayılmayan', products.filter(p => p.countedQuantity === 0).length.toString()]
-    ];
-    doc.autoTable({
+
+    autoTable(doc, {
       startY: 50,
       head: [['Metrik', 'Değer']],
-      body: statsData,
+      body: [
+        ['Toplam Ürün', products.length.toString()],
+        ['Sayılan Ürün', products.filter(p => p.countedQuantity > 0).length.toString()],
+        ['Doğru Sayım', products.filter(p => Number(p.countedQuantity) === Number(p.Envant)).length.toString()],
+        ['Eksik Sayım', products.filter(p => Number(p.countedQuantity) < Number(p.Envant) && p.countedQuantity > 0).length.toString()],
+        ['Fazla Sayım', products.filter(p => Number(p.countedQuantity) > Number(p.Envant)).length.toString()],
+        ['Sayılmayan', products.filter(p => p.countedQuantity === 0).length.toString()]
+      ],
       theme: 'grid'
     });
 
     // Detaylı Ürün Listesi
     doc.setFontSize(16);
     doc.text('Detaylı Ürün Listesi', 20, doc.lastAutoTable.finalY + 20);
-    const productData = products.map(product => [
-      product.Marka,
-      product.UrunKodu,
-      product.Barkod,
-      product.Envant,
-      product.countedQuantity.toString(),
-      Number(product.countedQuantity) === Number(product.Envant) ? 'Doğru' :
-      Number(product.countedQuantity) < Number(product.Envant) ? 'Eksik' :
-      Number(product.countedQuantity) > Number(product.Envant) ? 'Fazla' : 'Sayılmadı'
-    ]);
-    doc.autoTable({
-      startY: doc.lastAutoTable.finalY + 25,
-      head: [['Marka', 'Ürün Kodu', 'Barkod', 'Beklenen', 'Sayılan', 'Durum']],
-      body: productData,
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 30,
+      head: [['Marka', 'Ürün Kodu', 'Barkod', 'Beden', 'Envanter', 'Sayılan', 'Durum']],
+      body: products.map(product => [
+        product.Marka,
+        product.UrunKodu,
+        product.Barkod,
+        product.Bedi,
+        product.Envant,
+        product.countedQuantity.toString(),
+        product.countedQuantity === 0 ? 'Sayılmadı' :
+        Number(product.countedQuantity) === Number(product.Envant) ? 'Tamam' :
+        Number(product.countedQuantity) < Number(product.Envant) ? 'Eksik' : 'Fazla'
+      ]),
       theme: 'grid'
     });
 
-    doc.save('stok-sayim-raporu.pdf');
+    // PDF'i kaydet
+    doc.save(`Stok_Sayim_Raporu_${new Date().toLocaleDateString('tr-TR').replace(/\./g, '-')}.pdf`);
   };
 
   return (

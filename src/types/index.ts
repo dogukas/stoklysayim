@@ -1,3 +1,11 @@
+export interface CorrectionRecord {
+  timestamp: string;
+  oldValue: number;
+  newValue: number;
+  reason?: string;
+  operator?: string;
+}
+
 export interface Product {
   Marka: string;
   UrunGrubu: string;
@@ -8,6 +16,8 @@ export interface Product {
   Barkod: string;
   Sezi: string;
   countedQuantity: number;
+  corrections?: CorrectionRecord[];
+  lastCorrectionDate?: string;
 }
 
 export interface InventoryCount {

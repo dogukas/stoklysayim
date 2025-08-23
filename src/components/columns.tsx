@@ -2,8 +2,8 @@
 
 import { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
-import { Product } from "@/types";
-import { ArrowUpDown, ArrowUpCircle, ArrowDownCircle, MinusCircle } from "lucide-react";
+import { Product, CorrectionRecord } from "@/types";
+import { ArrowUpDown, ArrowUpCircle, ArrowDownCircle, MinusCircle, Edit, Plus, Minus, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { 
   DropdownMenu, 
@@ -14,8 +14,140 @@ import {
   DropdownMenuLabel,
   DropdownMenuCheckboxItem 
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { useState } from "react";
 
-export const columns: ColumnDef<Product>[] = [
+// Düzeltme fonksiyonları için tip tanımı
+type CorrectionActions = {
+  onCorrect?: (barkod: string, newValue: number, reason?: string) => void;
+  onShowHistory?: (barkod: string) => void;
+};
+
+// Sütunları oluşturan fonksiyon
+export const createColumns = (actions?: CorrectionActions): ColumnDef<Product>[] => [
+  // Düzeltme sütunu (en başta)
+  {
+    id: "corrections",
+    header: "Düzeltme",
+    cell: ({ row }) => {
+      const product = row.original;
+      const [isDialogOpen, setIsDialogOpen] = useState(false);
+      const [newValue, setNewValue] = useState(product.countedQuantity.toString());
+      const [reason, setReason] = useState("");
+
+      const handleCorrection = () => {
+        const correctionValue = parseInt(newValue);
+        if (!isNaN(correctionValue) && correctionValue >= 0) {
+          actions?.onCorrect?.(product.Barkod, correctionValue, reason);
+          setIsDialogOpen(false);
+          setReason("");
+        }
+      };
+
+      const quickAdjust = (adjustment: number) => {
+        const newVal = Math.max(0, product.countedQuantity + adjustment);
+        actions?.onCorrect?.(product.Barkod, newVal, `${adjustment > 0 ? '+' : ''}${adjustment} hızlı ayar`);
+      };
+
+      return (
+        <div className="flex items-center gap-1">
+          {/* Hızlı azaltma */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+            onClick={() => quickAdjust(-1)}
+            disabled={product.countedQuantity <= 0}
+          >
+            <Minus className="h-3 w-3" />
+          </Button>
+
+          {/* Hızlı artırma */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+            onClick={() => quickAdjust(1)}
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
+
+          {/* Manuel düzeltme dialog */}
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                onClick={() => setNewValue(product.countedQuantity.toString())}
+              >
+                <Edit className="h-3 w-3" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Sayım Düzeltme</DialogTitle>
+                <DialogDescription>
+                  {product.Marka} {product.UrunGrubu} - {product.UrunKodu}
+                  <br />
+                  Mevcut: {product.countedQuantity} | Beklenen: {product.Envant}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Yeni Sayım Değeri</label>
+                  <Input
+                    type="number"
+                    value={newValue}
+                    onChange={(e) => setNewValue(e.target.value)}
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Düzeltme Nedeni (İsteğe bağlı)</label>
+                  <Input
+                    type="text"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Örn: Gizli alan kontrolü, yanlış sayım"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  İptal
+                </Button>
+                <Button onClick={handleCorrection}>
+                  Düzelt
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Düzeltme geçmişi */}
+          {product.corrections && product.corrections.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+              onClick={() => actions?.onShowHistory?.(product.Barkod)}
+            >
+              <History className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      );
+    },
+  },
   {
     accessorKey: "Marka",
     header: ({ column }) => {
@@ -356,4 +488,7 @@ export const columns: ColumnDef<Product>[] = [
       }
     },
   },
-]; 
+];
+
+// Geriye uyumluluk için eski columns export'u
+export const columns = createColumns(); 

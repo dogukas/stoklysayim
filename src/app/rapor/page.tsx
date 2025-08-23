@@ -190,28 +190,48 @@ export default function RaporPage() {
   const generatePDF = () => {
     const doc = new jsPDF() as JsPDFWithAutoTable;
     
+    // Türkçe karakterler için font ayarı
+    doc.setFont('helvetica');
+    
+    // Türkçe karakter dönüşümü
+    const turkishText = (text: string) => {
+      return text
+        .replace(/ş/g, 's')
+        .replace(/Ş/g, 'S')
+        .replace(/ğ/g, 'g')
+        .replace(/Ğ/g, 'G')
+        .replace(/ü/g, 'u')
+        .replace(/Ü/g, 'U')
+        .replace(/ö/g, 'o')
+        .replace(/Ö/g, 'O')
+        .replace(/ç/g, 'c')
+        .replace(/Ç/g, 'C')
+        .replace(/ı/g, 'i')
+        .replace(/İ/g, 'I');
+    };
+    
     // Başlık
     doc.setFontSize(20);
-    doc.text('Stok Sayım Raporu', 20, 20);
+    doc.text(turkishText('Stok Sayım Raporu'), 20, 20);
     doc.setFontSize(12);
     doc.text(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`, 20, 30);
 
     // Genel İstatistikler
     doc.setFontSize(16);
-    doc.text('Genel İstatistikler', 20, 45);
+    doc.text(turkishText('Genel İstatistikler'), 20, 45);
     doc.setFontSize(12);
     const statsData = [
-      ['Toplam Ürün', products.length.toString()],
-      ['Sayılan Ürün', products.filter(p => p.countedQuantity > 0).length.toString()],
-      ['Doğru Sayım', products.filter(p => Number(p.countedQuantity) === Number(p.Envant)).length.toString()],
-      ['Eksik Sayım', products.filter(p => Number(p.countedQuantity) < Number(p.Envant) && p.countedQuantity > 0).length.toString()],
-      ['Fazla Sayım', products.filter(p => Number(p.countedQuantity) > Number(p.Envant)).length.toString()],
-      ['Sayılmayan', products.filter(p => p.countedQuantity === 0).length.toString()]
+      [turkishText('Toplam Ürün'), products.length.toString()],
+      [turkishText('Sayılan Ürün'), products.filter(p => p.countedQuantity > 0).length.toString()],
+      [turkishText('Doğru Sayım'), products.filter(p => Number(p.countedQuantity) === Number(p.Envant)).length.toString()],
+      [turkishText('Eksik Sayım'), products.filter(p => Number(p.countedQuantity) < Number(p.Envant) && p.countedQuantity > 0).length.toString()],
+      [turkishText('Fazla Sayım'), products.filter(p => Number(p.countedQuantity) > Number(p.Envant)).length.toString()],
+      [turkishText('Sayılmayan'), products.filter(p => p.countedQuantity === 0).length.toString()]
     ];
 
     autoTable(doc, {
       startY: 50,
-      head: [['Metrik', 'Değer']],
+      head: [[turkishText('Metrik'), turkishText('Değer')]],
       body: statsData,
       theme: 'grid'
     });
@@ -220,21 +240,21 @@ export default function RaporPage() {
 
     // Detaylı Ürün Listesi
     doc.setFontSize(16);
-    doc.text('Detaylı Ürün Listesi', 20, finalY1 + 20);
+    doc.text(turkishText('Detaylı Ürün Listesi'), 20, finalY1 + 20);
     const productData = products.map(product => [
       product.Marka,
       product.UrunKodu,
       product.Barkod,
       product.Envant,
       product.countedQuantity.toString(),
-      Number(product.countedQuantity) === Number(product.Envant) ? 'Doğru' :
+      Number(product.countedQuantity) === Number(product.Envant) ? turkishText('Doğru') :
       Number(product.countedQuantity) < Number(product.Envant) ? 'Eksik' :
-      Number(product.countedQuantity) > Number(product.Envant) ? 'Fazla' : 'Sayılmadı'
+      Number(product.countedQuantity) > Number(product.Envant) ? 'Fazla' : turkishText('Sayılmadı')
     ]);
 
     autoTable(doc, {
       startY: finalY1 + 25,
-      head: [['Marka', 'Ürün Kodu', 'Barkod', 'Beklenen', 'Sayılan', 'Durum']],
+      head: [['Marka', turkishText('Ürün Kodu'), 'Barkod', 'Beklenen', turkishText('Sayılan'), 'Durum']],
       body: productData,
       theme: 'grid'
     });

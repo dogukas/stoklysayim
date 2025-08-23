@@ -9,8 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/data-table";
-import { columns } from "@/components/columns";
-import { Trash2, FileDown, FileText } from "lucide-react";
+import { createColumns } from "@/components/columns";
+import { CorrectionRecord } from "@/types";
+import { Trash2, FileDown, FileText, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -31,6 +33,7 @@ export default function Home() {
   const [currentBarcode, setCurrentBarcode] = useState('');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error' | 'warning'>('success');
+  const [showCorrectionHistory, setShowCorrectionHistory] = useState<string | null>(null);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -121,6 +124,58 @@ export default function Home() {
     }
   }, []);
 
+  // Sayım düzeltme fonksiyonu
+  const handleCorrection = (barkod: string, newValue: number, reason?: string) => {
+    const updatedProducts = products.map(product => {
+      if (product.Barkod === barkod) {
+        const correction: CorrectionRecord = {
+          timestamp: new Date().toISOString(),
+          oldValue: product.countedQuantity,
+          newValue: newValue,
+          reason: reason,
+          operator: 'Current User' // İleriye yönelik kullanıcı sistemi için
+        };
+
+        const updatedProduct = {
+          ...product,
+          countedQuantity: newValue,
+          corrections: [...(product.corrections || []), correction],
+          lastCorrectionDate: correction.timestamp
+        };
+
+        // Durum mesajı
+        const expected = Number(product.Envant);
+        if (newValue === expected) {
+          setMessage(`✅ ${product.Marka} ${product.UrunGrubu} - Düzeltme tamamlandı! Sayım artık doğru (${newValue}/${expected})`);
+          setMessageType('success');
+        } else if (newValue < expected) {
+          setMessage(`⚠️ ${product.Marka} ${product.UrunGrubu} - Düzeltildi ama hala eksik (${newValue}/${expected})`);
+          setMessageType('warning');
+        } else {
+          setMessage(`⚠️ ${product.Marka} ${product.UrunGrubu} - Düzeltildi ama hala fazla (${newValue}/${expected})`);
+          setMessageType('warning');
+        }
+
+        return updatedProduct;
+      }
+      return product;
+    });
+
+    setProducts(updatedProducts);
+    localStorage.setItem('inventoryProducts', JSON.stringify(updatedProducts));
+  };
+
+  // Düzeltme geçmişi gösterme fonksiyonu
+  const handleShowHistory = (barkod: string) => {
+    setShowCorrectionHistory(barkod);
+  };
+
+  // Sütunları düzeltme fonksiyonları ile oluştur
+  const columnsWithActions = createColumns({
+    onCorrect: handleCorrection,
+    onShowHistory: handleShowHistory
+  });
+
   const handleClearData = () => {
     if (window.confirm('Tüm sayım verilerini sıfırlamak istediğinize emin misiniz?')) {
       const clearedProducts = products.map(product => ({
@@ -147,7 +202,10 @@ export default function Home() {
       'Sezon': product.Sezi,
       'Durum': product.countedQuantity === 0 ? 'Sayılmadı' :
                Number(product.countedQuantity) === Number(product.Envant) ? 'Tamam' :
-               Number(product.countedQuantity) < Number(product.Envant) ? 'Eksik' : 'Fazla'
+               Number(product.countedQuantity) < Number(product.Envant) ? 'Eksik' : 'Fazla',
+      'Düzeltme Sayısı': product.corrections?.length || 0,
+      'Son Düzeltme': product.lastCorrectionDate ? 
+        new Date(product.lastCorrectionDate).toLocaleString('tr-TR') : 'Yok'
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -166,38 +224,58 @@ export default function Home() {
   const generatePDF = () => {
     const doc = new jsPDF();
     
+    // Türkçe karakterler için font ayarı
+    doc.setFont('helvetica');
+    
+    // UTF-8 encoding için
+    const turkishText = (text: string) => {
+      return text
+        .replace(/ş/g, 's')
+        .replace(/Ş/g, 'S')
+        .replace(/ğ/g, 'g')
+        .replace(/Ğ/g, 'G')
+        .replace(/ü/g, 'u')
+        .replace(/Ü/g, 'U')
+        .replace(/ö/g, 'o')
+        .replace(/Ö/g, 'O')
+        .replace(/ç/g, 'c')
+        .replace(/Ç/g, 'C')
+        .replace(/ı/g, 'i')
+        .replace(/İ/g, 'I');
+    };
+    
     // Başlık
     doc.setFontSize(20);
-    doc.text('Stok Sayım Raporu', 20, 20);
+    doc.text(turkishText('Stok Sayım Raporu'), 20, 20);
     doc.setFontSize(12);
     doc.text(`Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}`, 20, 30);
 
     // Genel İstatistikler
     doc.setFontSize(16);
-    doc.text('Genel İstatistikler', 20, 45);
+    doc.text(turkishText('Genel İstatistikler'), 20, 45);
     doc.setFontSize(12);
 
     autoTable(doc, {
       startY: 50,
-      head: [['Metrik', 'Değer']],
+      head: [[turkishText('Metrik'), turkishText('Değer')]],
       body: [
-        ['Toplam Ürün', products.length.toString()],
-        ['Sayılan Ürün', products.filter(p => p.countedQuantity > 0).length.toString()],
-        ['Doğru Sayım', products.filter(p => Number(p.countedQuantity) === Number(p.Envant)).length.toString()],
-        ['Eksik Sayım', products.filter(p => Number(p.countedQuantity) < Number(p.Envant) && p.countedQuantity > 0).length.toString()],
-        ['Fazla Sayım', products.filter(p => Number(p.countedQuantity) > Number(p.Envant)).length.toString()],
-        ['Sayılmayan', products.filter(p => p.countedQuantity === 0).length.toString()]
+        [turkishText('Toplam Ürün'), products.length.toString()],
+        [turkishText('Sayılan Ürün'), products.filter(p => p.countedQuantity > 0).length.toString()],
+        [turkishText('Doğru Sayım'), products.filter(p => Number(p.countedQuantity) === Number(p.Envant)).length.toString()],
+        [turkishText('Eksik Sayım'), products.filter(p => Number(p.countedQuantity) < Number(p.Envant) && p.countedQuantity > 0).length.toString()],
+        [turkishText('Fazla Sayım'), products.filter(p => Number(p.countedQuantity) > Number(p.Envant)).length.toString()],
+        [turkishText('Sayılmayan'), products.filter(p => p.countedQuantity === 0).length.toString()]
       ],
       theme: 'grid'
     });
 
     // Detaylı Ürün Listesi
     doc.setFontSize(16);
-    doc.text('Detaylı Ürün Listesi', 20, doc.lastAutoTable.finalY + 20);
+    doc.text(turkishText('Detaylı Ürün Listesi'), 20, doc.lastAutoTable.finalY + 20);
 
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + 30,
-      head: [['Marka', 'Ürün Kodu', 'Barkod', 'Beden', 'Envanter', 'Sayılan', 'Durum']],
+      head: [['Marka', turkishText('Ürün Kodu'), 'Barkod', 'Beden', 'Envanter', turkishText('Sayılan'), 'Durum']],
       body: products.map(product => [
         product.Marka,
         product.UrunKodu,
@@ -205,7 +283,7 @@ export default function Home() {
         product.Bedi,
         product.Envant,
         product.countedQuantity.toString(),
-        product.countedQuantity === 0 ? 'Sayılmadı' :
+        product.countedQuantity === 0 ? turkishText('Sayılmadı') :
         Number(product.countedQuantity) === Number(product.Envant) ? 'Tamam' :
         Number(product.countedQuantity) < Number(product.Envant) ? 'Eksik' : 'Fazla'
       ]),
@@ -331,9 +409,89 @@ export default function Home() {
               <span className="text-sm text-gray-500">{products.filter(p => Number(p.countedQuantity) > Number(p.Envant)).length} ürün</span>
             </div>
           </div>
-          <DataTable columns={columns} data={products} />
+          <DataTable columns={columnsWithActions} data={products} />
         </CardContent>
       </Card>
+
+      {/* Düzeltme Geçmişi Modal */}
+      <Dialog open={!!showCorrectionHistory} onOpenChange={() => setShowCorrectionHistory(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              Düzeltme Geçmişi
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCorrectionHistory(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          {showCorrectionHistory && (() => {
+            const product = products.find(p => p.Barkod === showCorrectionHistory);
+            if (!product) return null;
+
+            return (
+              <div className="space-y-4">
+                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                  <h3 className="font-semibold">{product.Marka} {product.UrunGrubu}</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Ürün Kodu: {product.UrunKodu} | Barkod: {product.Barkod}
+                  </p>
+                  <p className="text-sm">
+                    Beklenen: {product.Envant} | Mevcut: {product.countedQuantity}
+                  </p>
+                </div>
+
+                {product.corrections && product.corrections.length > 0 ? (
+                  <div className="space-y-3">
+                    <h4 className="font-medium">Düzeltme Kayıtları:</h4>
+                    {product.corrections.map((correction, index) => (
+                      <div key={index} className="border rounded-lg p-3 space-y-2">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">
+                              {correction.oldValue} → {correction.newValue}
+                            </span>
+                            <Badge variant={
+                              correction.newValue > correction.oldValue ? "default" : 
+                              correction.newValue < correction.oldValue ? "destructive" : "secondary"
+                            }>
+                              {correction.newValue > correction.oldValue ? `+${correction.newValue - correction.oldValue}` : 
+                               correction.newValue < correction.oldValue ? `${correction.newValue - correction.oldValue}` : 
+                               'Değişiklik yok'}
+                            </Badge>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {new Date(correction.timestamp).toLocaleString('tr-TR')}
+                          </span>
+                        </div>
+                        
+                        {correction.reason && (
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            <strong>Neden:</strong> {correction.reason}
+                          </p>
+                        )}
+                        
+                        {correction.operator && (
+                          <p className="text-xs text-gray-500">
+                            Düzenleyen: {correction.operator}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-4">
+                    Henüz düzeltme yapılmamış
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
